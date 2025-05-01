@@ -1,0 +1,14 @@
+version: 2
+
+sources:
+  - name: raw_schema_customer
+    schema: raw_schema_customer
+    tables: 
+      - name: raw_customer
+
+  models:
+    - name: stg_customer
+      description: Staging model for raw customer data from source respository.
+    - name: dim_customer
+      description: SCD type 2 customer dimension that stores data on the customer.
+      
