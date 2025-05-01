@@ -11,4 +11,10 @@ sources:
       description: Staging model for raw customer data from source respository.
     - name: dim_customer
       description: SCD type 2 customer dimension that stores data on the customer.
+      columns:
+        - name: customer_id
+          description: "The unique ID for each customer"
+          tests:
+            - unique
+            - nit_null
       
