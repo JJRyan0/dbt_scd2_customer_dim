@@ -42,70 +42,86 @@ __Provide the incremental logic:__
 
 ```sql
 
--- 1. Select all raw source data
-WITH source_data AS (
-    SELECT *,
-           md5(coalesce(name, '') || coalesce(address, '')) AS hash_key
-    FROM {{ source('raw', 'customers') }}
-),
+with source_customer as (
+  select 
+    customer_id,
+    name,
+    address,
+    updated_dt,
+    md5(coalesce(name, '') || coalesce(address, '')) as hash_key
+  from {{ source('raw_customer', 'raw_customer') }}
+)
+select * from source_customer
 
--- 2. Deduplicate by customer_id, keeping the most recent update
-deduped AS (
-    SELECT *,
-           ROW_NUMBER() OVER (PARTITION BY customer_id ORDER BY updated_dt DESC) AS rn
-    FROM source_data
-),
+```
 
--- 3. Keep only the latest records per customer
-latest_updates AS (
-    SELECT * FROM deduped WHERE rn = 1
-),
+```sql
 
--- 4. Identify changes based on hash_key comparison
-changed_records AS (
-    SELECT lu.*
-    FROM latest_updates lu
-    LEFT JOIN {{ this }} t
-      ON lu.customer_id = t.customer_id AND t.is_current = TRUE
-    WHERE t.customer_id IS NULL
-       OR lu.hash_key <> t.hash_key
+-- Incremental model for dim_customers
+-- Target table created by dbt will be analytics.dim_customers
+
+{{ config(
+  materialized='incremental',
+  post_hook="{{ update_dim_customer(this) }}"
+) }}
+
+with deduped_customer as (  -- Deduplicate by customer_id and sort by latest record
+  select
+    customer_id,
+    name,
+    address,
+    updated_dt,
+    md5(coalesce(name, '') || coalesce(address, '')) AS hash_key,
+    row_number() over(partition by customer_id order by updated_dt desc) as rn
+  from {{ source('raw_customer', 'raw_customer') }}  -- Reference your source here (adjust schema if needed)
+),
+-- Keep only the latest records per customer
+latest_customer_updates as (
+  select
+    customer_id,
+    name,
+    address,
+    updated_dt,
+    hash_key,
+    rn
+  from deduped_customer
+  where rn = 1
+),
+-- Identify changes based on hash_key comparison
+changed_customer_records as (
+  select 
+    lcu.customer_id,
+    lcu.name,
+    lcu.address,
+    lcu.updated_dt,
+    lcu.hash_key
+  from latest_customer_updates lcu
+  {% if is_incremental() %}
+  left join {{ this }} t
+    on lcu.customer_id = t.customer_id
+    and t.is_current = TRUE
+  where t.customer_id is null
+    or lcu.hash_key <> t.hash_key
+  {% endif %}
 )
 
--- INSERT new versioned records
-INSERT INTO {{ this }} (
-    customer_sk,
+-- This is the part where we perform the INSERT
+select
+    nextval('customer_sk_seq') as customer_sk,  -- Make sure 'customer_sk_seq' exists
     customer_id,
     name,
     address,
     hash_key,
-    effective_start,
-    effective_end,
-    is_current
-)
-SELECT
-    nextval('customer_sk_seq') AS customer_sk,
-    customer_id,
-    name,
-    address,
-    hash_key,
-    updated_dt AS effective_start,
-    NULL AS effective_end,
-    TRUE AS is_current
-FROM changed_records;
+    updated_dt as effective_start,
+    null as effective_end,
+    true as is_current
+from changed_customer_records
 
--- UPDATE previous versions to mark as not current
-UPDATE {{ this }} t
-SET
-    is_current = FALSE,
-    effective_end = cr.updated_dt
-FROM changed_records cr
-WHERE t.customer_id = cr.customer_id
-  AND t.is_current = TRUE;
-
--- Optional: filter for incremental processing only
 {% if is_incremental() %}
-  AND latest_updates.updated_dt > (SELECT MAX(updated_dt) FROM {{ this }})
+-- Get the max updated_dt from the raw_customer source table, not from {{ this }}
+where updated_dt > (select max(updated_dt) from {{ source('raw_customer', 'raw_customer') }})
 {% endif %}
+
 
 ```
 
@@ -131,7 +147,8 @@ incremental() with a timestamp: Ensure that your incremental model uses a timest
 ```sql
 
 {% if is_incremental() %}
-  where updated_at > (select max(updated_at) from {{ this }})
+-- Get the max updated_dt from the raw_customer source table, not from {{ this }}
+where updated_dt > (select max(updated_dt) from {{ source('raw_customer', 'raw_customer') }})
 {% endif %}
 
 ```
