@@ -6,6 +6,6 @@ select customer_id
         address,
         updated_dt,
         md5(coalesce(name, '') || coalesce(address, '')) as hash_key
-from {{ source('raw_schema_customer', 'raw_customer') }}
+from {{ source('raw_customer', 'raw_customer') }}
 )
 
