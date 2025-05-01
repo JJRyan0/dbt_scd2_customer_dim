@@ -1,0 +1,23 @@
+name: 'dim_cust_increment'
+version: '1.0'
+config-version: 2
+
+profile: 'dim_cust_dbt'
+
+target-path: target  # Directory where compiled models and logs go
+clean-targets:
+  - target
+  - dbt_modules
+
+models:
+  dim_cust_increment:
+    +materialized: incremental  # Default materialization for models
+    dim_customer:
+      +materialized: incremental  # Make `dim_customer` incremental
+      +unique_key: customer_id  # The unique key to use for incremental models
+      +incremental_strategy: append  # How to apply the incremental logic
+
+  snapshots:
+  dim_cust_increment:
+    +strategy: timestamp  # Snapshot strategy for capturing changes over time
+    +unique_key: customer_id  # Unique key to track changes
