@@ -2,20 +2,28 @@ name: 'customer_dbt'
 version: '1.0'
 config-version: 2
 
-profile: 'dim_cust_dbt'
+profile: 'customer_dbt'
 
 target-path: target  # Directory where compiled models and logs go
 clean-targets:
   - target
   - dbt_modules
 
+model-paths: ["models"]  
+
 models:
   customer_dbt:
-    +materialized: incremental  # Default materialization for models
-    dim_customer:
-      +materialized: incremental  # Make `dim_customer` incremental
-      +unique_key: customer_id  # The unique key to use for incremental models
-      +incremental_strategy: append  # How to apply the incremental logic
+    +schema: analytics
+    +materialized: incremental
+    marts:
+      dimensions:
+        dim_customer:
+          +materialized: incremental
+          +unique_key: customer_id
+          +incremental_strategy: append
+
+    staging:
+      +materialized: view  # Optional, can be incremental too
 
   snapshots:
   customer_dbt:
