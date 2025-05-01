@@ -1,4 +1,4 @@
-name: 'dim_cust_increment'
+name: 'customer_dbt'
 version: '1.0'
 config-version: 2
 
@@ -10,7 +10,7 @@ clean-targets:
   - dbt_modules
 
 models:
-  dim_cust_increment:
+  customer_dbt:
     +materialized: incremental  # Default materialization for models
     dim_customer:
       +materialized: incremental  # Make `dim_customer` incremental
@@ -18,10 +18,10 @@ models:
       +incremental_strategy: append  # How to apply the incremental logic
 
   snapshots:
-  dim_cust_increment:
+  customer_dbt:
     +strategy: timestamp  # Snapshot strategy for capturing changes over time
     +unique_key: customer_id  # Unique key to track changes
 
   macros:
-  dim_cust_increment:
+  customer_dbt:
     +enabled: true  # Enables or disables macros in your project
