@@ -1,70 +1,64 @@
--- incremental model for dim customers
--- target table created by dbt will be analytics.dim_customers
+-- Incremental model for dim_customers
+-- Target table created by dbt will be analytics.dim_customers
 
 {{ config(
-  materialized ='incremental',
+  materialized='incremental',
   post_hook="{{ update_dim_customer(this) }}"
 ) }}
 
-with deduped_customer as (         -- depuplicate by customer_id and sort by latest record
+with deduped_customer as (  -- Deduplicate by customer_id and sort by latest record
   select
-        customer_id,
-        name,
-        address,
-        updated_dt,
-        hash_key,
-        row_number() over(partition by customer_id order by updated_dt desc) as rn
-  from source_customer
-  ),
--- keep only the leatest records per customer
-latest_customer_udates as (
-  select
-        customer_id,
-        name,
-        address,
-        updated_dt,
-        hash_key,
-        rn
-  from deduped_customer
-  where rn = 1
-  ),
--- Identify changes based on hash_key comparison
-  
-changed_customer_records as (
-  select 
-        customer_id,
-        name,
-        address,
-        updated_dt,
-        hash_key,
-        rn,
-  from latest_customer_udates lcu
-  left join {{ this }} t
-        on lcu.customer_id = t.customer_id
-        and t.is_current = TRUE
-    where t.customer_id is null
-      or lcu.hash_key <> t.hash_key
-  )
-insert into {{ this }} (        -- insert new records with effective start date and is current true, end date is null.
-    customer_sk,
-    customer_id
+    customer_id,
     name,
     address,
+    updated_dt,
+    md5(coalesce(name, '') || coalesce(address, '')) AS hash_key,
+    row_number() over(partition by customer_id order by updated_dt desc) as rn
+  from {{ source('raw_customer', 'raw_customer') }}  -- Reference your source here (adjust schema if needed)
+),
+-- Keep only the latest records per customer
+latest_customer_updates as (
+  select
+    customer_id,
+    name,
+    address,
+    updated_dt,
     hash_key,
-    effective_start,
-    effective_end,
-    is_current
-  )
+    rn
+  from deduped_customer
+  where rn = 1
+),
+-- Identify changes based on hash_key comparison
+changed_customer_records as (
+  select 
+    lcu.customer_id,
+    lcu.name,
+    lcu.address,
+    lcu.updated_dt,
+    lcu.hash_key
+  from latest_customer_updates lcu
+  {% if is_incremental() %}
+  left join {{ this }} t
+    on lcu.customer_id = t.customer_id
+    and t.is_current = TRUE
+  where t.customer_id is null
+    or lcu.hash_key <> t.hash_key
+  {% endif %}
+)
+
+-- This is the part where we perform the INSERT
 select
-    nextval('customer_sk_seq') as customer_sk,
+    nextval('customer_sk_seq') as customer_sk,  -- Make sure 'customer_sk_seq' exists
     customer_id,
     name,
     address,
     hash_key,
-    updated_dt as effective_start_date,
-    null as effective_end_date
-    true as is_current,
+    updated_dt as effective_start,
+    null as effective_end,
+    true as is_current
 from changed_customer_records
+
 {% if is_incremental() %}
-where updated_dt > (select max(updated_dt) from {{ this }})
+-- Get the max updated_dt from the raw_customer source table, not from {{ this }}
+where updated_dt > (select max(updated_dt) from {{ source('raw_customer', 'raw_customer') }})
 {% endif %}
