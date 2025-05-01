@@ -1,7 +1,10 @@
 -- incremental model for dim customers
 -- target table created by dbt will be analytics.dim_customers
 
-{{ config(materialized ='incremental') }}
+{{ config(
+  materialized ='incremental',
+  post_hook="{{ update_dim_customer(this) }}"
+) }}
 
 with deduped_customer as (         -- depuplicate by customer_id and sort by latest record
   select
