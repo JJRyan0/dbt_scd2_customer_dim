@@ -10,4 +10,4 @@ where t.customer_id = ccr.customer_id
 and t.is_current = TRUE;
 and md5(coalesce(t.name, '') || coalesce(t.address, '')) <> ccr.hash_key
 and cr.updated_dt > coalesce(t.effective_start, '1900-01-01')
-
+{% endmacro %}
