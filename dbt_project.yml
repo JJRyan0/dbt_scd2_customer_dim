@@ -21,3 +21,7 @@ models:
   dim_cust_increment:
     +strategy: timestamp  # Snapshot strategy for capturing changes over time
     +unique_key: customer_id  # Unique key to track changes
+
+  macros:
+  dim_cust_increment:
+    +enabled: true  # Enables or disables macros in your project
