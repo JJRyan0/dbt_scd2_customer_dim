@@ -1,0 +1,8 @@
+create schema if not exists raw_schema_customer
+
+create table raw_schema.customer(
+  customer_id int primary key,
+  name text,
+  address text,
+  update_dt timestamp
+);
